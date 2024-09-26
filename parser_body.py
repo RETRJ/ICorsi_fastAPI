@@ -26,12 +26,11 @@ def drivers_init() -> webdriver:
     """
     chrome_options = Options()
     chrome_options.add_argument("--headless")
-    # chrome_options.add_argument("--disable-extensions")
-    # chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--disable-extensions")
+    chrome_options.add_argument("--disable-gpu")
     # chrome_options.add_argument("--no-sandbox") # linux only
     service = webdriver.ChromeService(executable_path=DRIVER_PATH)
-    driver = webdriver.Chrome(service=service, options=chrome_options)
-    return driver
+    return webdriver.Chrome(service=service, options=chrome_options)
 
 
 driver = drivers_init()
