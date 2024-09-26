@@ -20,12 +20,9 @@ DRIVER_PATH = os.getenv('DRIVER_PATH')
 
 def drivers_init() -> webdriver:
     """
-    Initializes a headless Chrome WebDriver.
+    Initializes and returns a headless Chrome WebDriver instance.
 
-    This function sets up Chrome options to run the browser in headless mode (without a graphical user interface)
-    and creates a Chrome WebDriver instance using the specified driver path.
-
-    :return: A Chrome WebDriver instance with headless options configured.
+    :return: A Selenium WebDriver instance configured to run in headless mode.
     """
     chrome_options = Options()
     chrome_options.add_argument("--headless")
@@ -42,9 +39,9 @@ driver = drivers_init()
 
 def navigate_and_login(url: str = AUTH_URL, login: str = LOGIN, password: str = PASSWORD):
     """
-    :param url: The URL to navigate to for login.
-    :param login: The username or login identifier.
-    :param password: The corresponding password for the login.
+    :param url: The URL to navigate to for authentication.
+    :param login: The login credential used for authentication.
+    :param password: The password credential used for authentication.
     :return: None
     """
     if driver is None:
@@ -77,8 +74,8 @@ def navigate_and_login(url: str = AUTH_URL, login: str = LOGIN, password: str = 
 
 def post_request(data):
     """
-    :param data: Dictionary containing the payload to be sent in the POST request
-    :return: Response object resulting from the POST request
+    :param data: Data to be sent in the body of the POST request. This should be in a format that can be serialized to JSON.
+    :return: The response object resulting from the POST request.
     """
     response = requests.post(HOOK, json=data)
     return response
@@ -88,6 +85,10 @@ courses: List[Dict[str, str]] = list()
 
 
 async def add_course(url: str):
+    """
+    :param url: The URL of the course to be added.
+    :return: None
+    """
     if 'https://www.icorsi.ch/' not in url:
         post_request(data={'data': f'Not "<https://www.icorsi.ch/>"'})
         print(
@@ -127,11 +128,19 @@ async def add_course(url: str):
 
 
 async def parser_worker(interval):
+    """
+    :param interval: The time interval in seconds that the worker waits between parsing activities.
+    """
     post_request(data={'data': 'Logging in to ICorsi'})
     navigate_and_login()
     post_request(data={'data': 'Logined succesfully'})
 
     async def get_course_items() -> Dict[str, set]:
+        """
+        Fetches course items from a list of URLs and parses the content to extract specific items.
+
+        :return: Dictionary where keys are course names and values are sets of extracted item names.
+        """
         res = dict()
         for url in courses:
             driver.get(url['url'])
