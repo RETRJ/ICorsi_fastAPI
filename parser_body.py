@@ -71,12 +71,13 @@ def navigate_and_login(url: str = AUTH_URL, login: str = LOGIN, password: str = 
     WebDriverWait(driver, timeout).until(EC.url_changes(url))
 
 
-def post_request(data):
+def post_request(data, url = HOOK):
     """
-    :param data: Data to be sent in the body of the POST request. This should be in a format that can be serialized to JSON.
-    :return: The response object resulting from the POST request.
+    :param data: The payload to be sent in the POST request. It should be a dictionary representing the JSON body.
+    :param url: The URL to which the POST request will be sent. Defaults to the value of the HOOK variable.
+    :return: The response object returned by the requests.post call, containing the server's response to the HTTP request.
     """
-    response = requests.post(HOOK, json=data)
+    response = requests.post(url, json=data)
     return response
 
 
@@ -132,7 +133,7 @@ async def parser_worker(interval):
     navigate_and_login()
     post_request(data={'data': 'Logined succesfully'})
 
-    async def get_course_items() -> Dict[str, set]:
+    async def get_course_items() -> Dict[str, list[Dict[str, str]]]:
         """
         Fetches course items from a list of URLs and parses the content to extract specific items.
 
@@ -143,37 +144,53 @@ async def parser_worker(interval):
             driver.get(url['url'])
             WebDriverWait(driver, 30).until(EC.visibility_of_element_located((By.CLASS_NAME, 'page-header-headings')))
             soup = BeautifulSoup(driver.page_source, 'html.parser')
-            res[url['name']] = set()
+            res[url['name']] = list()
 
             items = soup.find_all('li', {'data-for': 'cmitem'})
-            for items in items:
-                if t := items.find('span', {'class': 'instancename'}):
-                    res[url['name']].add(t.find(string=True, recursive=False).strip())
+            for item in items:
+                if t := item.find('span', {'class': 'instancename'}):
+                    item_name = t.find(string=True, recursive=False).strip()
+                    if typ := t.find('span', {'class': 'accesshide '}):
+                        item_type = typ.find(string=True, recursive=False).strip()
+                    else:
+                        item_type = 'Link'
+                else:
+                    continue
+                link = item.find('a')['href']
+                res[url['name']].append(
+                    {'name': item_name, 'type': item_type, 'link': link}
+                )
+
         return res
 
+    def find_difference(list1: list[Dict[str, str]], list2: list[Dict[str, str]]) -> tuple[list[Dict[str, str]], list[Dict[str, str]]] :
+        """
+        :param list1: First list of dictionaries to compare.
+        :param list2: Second list of dictionaries to compare.
+        :return: A tuple containing two lists of dictionaries - the first list contains the dictionaries that are in list2 but not in list1, and the second list contains the dictionaries that are in list1 but not in list2.
+        """
+        set1 = {frozenset(d.items()) for d in list1}
+        set2 = {frozenset(d.items()) for d in list2}
+
+        add = [dict(items) for items in (set2 - set1)]
+        rem = [dict(items) for items in (set1 - set2)]
+
+        return add, rem
+
     course_items_prev = await get_course_items()
+    #course_items_prev = dict()
     while True:
+        print(course_items_prev)
         await asyncio.sleep(interval)
 
         course_items = await get_course_items()
         print(
             f'parsing {courses}')
-        message = ''
+        message = dict()
         for key in course_items_prev.keys():
-            added = course_items[key] - course_items_prev[key]
-            removed = course_items_prev[key] - course_items[key]
-            if len(added) != 0 or len(removed) != 0:
-                message += f'FOR "{key}":\n'
-
-                if len(added) != 0:
-                    message += '\tADDED:\n'
-                    for i in added:
-                        message += f'\t{i}\n'
-
-                if len(removed) != 0:
-                    message += '\tREMOVED:\n'
-                    for i in removed:
-                        message += f'\t{i}\n'
-        if message != '':
+            added, removed = find_difference(course_items[key], course_items_prev[key])
+            if added or removed:
+                message[key] = {'added': added, 'removed': removed}
+        if message:
             post_request(data={'data': message})
         course_items_prev = course_items
